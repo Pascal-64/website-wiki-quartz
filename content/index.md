@@ -11,6 +11,8 @@ title: Wiki
 - [[Projekte/README|Projekte]]
 - [[LLM-Wiki/README|LLM-Wiki]]
 - [[Tools/README|Tools]]
+- [[Themen/LLM|Themen]]
+- [[Glossar/Token|Glossar]]
 
 ## Zweck
 
