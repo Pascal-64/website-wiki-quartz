@@ -2,17 +2,7 @@
 title: Wiki
 ---
 
-# Wiki
-
 Öffentlicher Wissensbereich zu Projekten, Tools, LLM-Workflows und technischen Notizen.
-
-## Bereiche
-
-- [[Projekte/README|Projekte]]
-- [[LLM-Wiki/README|LLM-Wiki]]
-- [[Tools/README|Tools]]
-- [[Themen/AI-Agents|Themen]]
-- [[Glossar/Agent|Glossar]]
 
 ## Zweck
 
