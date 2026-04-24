@@ -6,7 +6,7 @@ title: Tools
 
 Sammlung technischer Tools, Setups und Arbeitsabläufe.
 
-## Mögliche Themen
+## Themen
 
 - Git
 - Vercel

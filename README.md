@@ -1,6 +1,34 @@
 # Website Wiki Quartz
 
-Eigenständiges Quartz-Wiki als zusätzlicher Wissensbereich zur Portfolio-Seite.
+Eigenständiges Quartz-Wiki als öffentlicher Wissensbereich zur Portfolio-Seite.
+
+## Aktuelle Production-URL
+
+```text
+https://website-wiki-quartz.vercel.app/
+```
+
+## Portfolio-Seite
+
+```text
+https://website-eight-lilac-81.vercel.app/
+```
+
+## Hinweise zu URLs
+
+Markdown-Dateien in `content/` werden als Seiten gerendert. Dateinamen und interne Links sind konsistent mit Bindestrichen benannt.
+
+Standard:
+
+```text
+content/Themen/AI-Agents.md
+```
+
+Link:
+
+```md
+[[Themen/AI-Agents|AI Agents]]
+```
 
 ## Ausgangslage
 

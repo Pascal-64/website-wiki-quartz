@@ -1,3 +1,22 @@
 @use "./base.scss";
 
-// put your custom CSS here!
+// Graph preview height
+.graph > .graph-outer {
+  height: 340px;
+}
+
+// Sharp corners matching portfolio design
+.graph > .graph-outer,
+.graph > .global-graph-outer > .global-graph-container {
+  border-radius: 2px;
+}
+
+// No decorative borders — tonal depth only (matches portfolio "No-Line Rule")
+.graph > .graph-outer {
+  border-color: var(--lightgray);
+}
+
+// Sidebar right: subtle spacing
+.right .graph {
+  margin-bottom: 1rem;
+}

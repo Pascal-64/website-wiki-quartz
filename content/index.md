@@ -11,17 +11,17 @@ title: Wiki
 - [[Projekte/README|Projekte]]
 - [[LLM-Wiki/README|LLM-Wiki]]
 - [[Tools/README|Tools]]
-- [[Themen/LLM|Themen]]
-- [[Glossar/Token|Glossar]]
+- [[Themen/AI-Agents|Themen]]
+- [[Glossar/Agent|Glossar]]
 
 ## Zweck
 
-Dieses Wiki dient als strukturierter öffentlicher Wissensbereich neben meiner Portfolio-Seite.
+Dieses Wiki ist ein strukturierter öffentlicher Wissensbereich neben meiner Portfolio-Seite.
 
-Die bestehende Portfolio-Seite läuft aktuell hier:
+Die Portfolio-Seite läuft hier:
 
 https://website-eight-lilac-81.vercel.app/
 
-Das Wiki soll bewusst getrennt davon aufgebaut werden, damit Portfolio und Wiki unabhängig deploybar bleiben.
+Portfolio und Wiki bleiben bewusst getrennt. Dadurch sind beide Projekte unabhängig deploybar, wartbar und erweiterbar.
 
-Später können ausgewählte Obsidian-Notizen hier ergänzt werden, ohne den kompletten privaten Vault zu veröffentlichen.
+Ausgewählte Obsidian-Notizen werden hier als öffentliche Markdown-Seiten dargestellt. Private Vault-Inhalte bleiben außerhalb dieses Repos.
