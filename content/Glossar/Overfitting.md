@@ -1,6 +1,6 @@
 ---
+title: Overfitting
 tags: [glossar, ml, training]
-typ: glossar
 ---
 
 # Overfitting

@@ -1,6 +1,6 @@
 ---
+title: Transformer
 tags: [glossar, deep-learning, llm, architektur]
-typ: glossar
 ---
 
 # Transformer

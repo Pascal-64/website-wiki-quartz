@@ -1,6 +1,6 @@
 ---
+title: API
 tags: [glossar, api, web, software]
-typ: glossar
 ---
 
 # API

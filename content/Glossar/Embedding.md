@@ -1,6 +1,6 @@
 ---
+title: Embedding
 tags: [glossar, llm, nlp, ml]
-typ: glossar
 ---
 
 # Embedding

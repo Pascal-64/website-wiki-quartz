@@ -1,6 +1,6 @@
 ---
+title: Agent
 tags: [glossar, ki, agents, llm]
-typ: glossar
 ---
 
 # Agent

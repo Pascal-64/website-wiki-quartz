@@ -1,6 +1,6 @@
 ---
+title: Gradient Descent
 tags: [glossar, ml, deep-learning, optimierung]
-typ: glossar
 ---
 
 # Gradient Descent

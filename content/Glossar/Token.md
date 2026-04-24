@@ -1,6 +1,6 @@
 ---
+title: Token
 tags: [glossar, llm, nlp]
-typ: glossar
 ---
 
 # Token
