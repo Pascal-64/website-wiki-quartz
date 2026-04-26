@@ -1,0 +1,44 @@
+name: Wiki Gap Filler
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # täglich 07:00 UTC (09:00 Berlin)
+  workflow_dispatch: # auch manuell auslösbar
+
+concurrency:
+  group: wiki-gap-filler
+  cancel-in-progress: false # laufenden Job nie abbrechen
+
+jobs:
+  fill-gaps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Detect wiki gaps (Report)
+        run: python scripts/detect_wiki_gaps.py
+
+      - name: Fill gaps via Claude + web search
+        run: python scripts/fill_wiki_gaps.py
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Validate and apply patches
+        run: python scripts/validate_wiki_changes.py
+
+      - name: Create PR
+        run: python scripts/create_pr.py
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
