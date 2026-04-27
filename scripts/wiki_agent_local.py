@@ -27,8 +27,8 @@ import ollama
 from wiki_apply_patch import apply_patch
 from wiki_context import build_context
 from wiki_detect_gaps import parse_gaps
-from wiki_search import format_results, search
-from wiki_validate import validate
+from wiki_search import extract_key_facts, format_results, search
+from wiki_validate import check_criteria, validate
 
 CONTENT_DIR = Path("content")
 GAPS_FILE = CONTENT_DIR / "wiki-gaps.md"
@@ -47,6 +47,10 @@ Regeln:
 - Keine Wiederholung bestehender Abschnitte.
 - Mathematik: $...$ (inline) und $$...$$ (Block). KEIN \\(...\\) oder \\[...\\].
 - Heading-Ebene: Eine Ebene tiefer als das Ziel-Heading. Die erwartete Ebene steht im Prompt.
+- Verwende bei Codebeispielen echte Python-Bibliotheken (peft, transformers, torch).
+  Kein abstrakter Pseudocode mit Platzhalterfunktionen wie compute_gradients().
+- Nutze die Quellenfakten aus dem Prompt sichtbar im Abschnitt.
+- Zitiere verwendete Quellen am Ende als kompakte Liste (nur URL, kein Fließtext).
 - Wikilinks im Format [[Seitenname]] nur wenn sinnvoll.
 - Schreibe auf Deutsch.\
 """
@@ -83,6 +87,11 @@ def build_user_prompt(gap: dict, ctx: dict) -> str:
 
     if ctx.get("search_results"):
         parts.append(f"## Recherche-Ergebnisse\n\n{ctx['search_results']}")
+
+    if ctx.get("key_facts"):
+        parts.append(
+            f"## Quellenfakten (müssen im Abschnitt verwendet werden)\n\n{ctx['key_facts']}"
+        )
 
     parts.append(
         f"## Zieldatei\n\n"
@@ -182,11 +191,15 @@ def main() -> None:
             print("  Web-Suche läuft...")
             search_results = search(gap)
             ctx["search_results"] = format_results(search_results)
+            ctx["key_facts"] = extract_key_facts(search_results)
             (run_dir / "sources.md").write_text(
-                f"# Recherche-Ergebnisse\n\n{ctx['search_results']}\n", encoding="utf-8"
+                f"# Recherche-Ergebnisse\n\n{ctx['search_results']}\n\n"
+                f"# Key Facts\n\n{ctx['key_facts']}\n",
+                encoding="utf-8",
             )
         else:
             ctx["search_results"] = ""
+            ctx["key_facts"] = ""
 
         (run_dir / "context.md").write_text(
             f"# Context\n\n"
@@ -231,6 +244,7 @@ def main() -> None:
         print(f"  Generated {len(generated)} chars.")
 
         errors, warnings = validate(generated, gap)
+        warnings.extend(check_criteria(generated, gap, ctx.get("search_results", "")))
         log_lines: list[str] = []
 
         if errors:

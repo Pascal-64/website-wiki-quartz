@@ -13,7 +13,9 @@ def parse_gaps(content: str) -> list[dict]:
     current = None
     in_section = False
     in_aufgabe = False
+    in_kriterien = False
     aufgabe_lines: list[str] = []
+    kriterien_lines: list[str] = []
 
     for line in content.split("\n"):
         if line.startswith("## Offene Lücken"):
@@ -23,6 +25,7 @@ def parse_gaps(content: str) -> list[dict]:
             in_section = False
             if current:
                 current["aufgabe"] = "\n".join(aufgabe_lines).strip()
+                current["kriterien"] = [k for k in kriterien_lines if k]
                 gaps.append(current)
                 current = None
             continue
@@ -33,6 +36,7 @@ def parse_gaps(content: str) -> list[dict]:
         if line.startswith("### "):
             if current:
                 current["aufgabe"] = "\n".join(aufgabe_lines).strip()
+                current["kriterien"] = [k for k in kriterien_lines if k]
                 gaps.append(current)
             current = {
                 "title": line[4:].strip(),
@@ -42,9 +46,12 @@ def parse_gaps(content: str) -> list[dict]:
                 "mode": "append_under_heading",
                 "heading": "",
                 "aufgabe": "",
+                "kriterien": [],
             }
             in_aufgabe = False
+            in_kriterien = False
             aufgabe_lines = []
+            kriterien_lines = []
             continue
 
         if current is None:
@@ -55,6 +62,18 @@ def parse_gaps(content: str) -> list[dict]:
 
         if line.strip() == "Aufgabe:":
             in_aufgabe = True
+            in_kriterien = False
+            continue
+
+        if line.strip() == "Akzeptanzkriterien:":
+            in_aufgabe = False
+            in_kriterien = True
+            continue
+
+        if in_kriterien:
+            stripped = line.strip()
+            if stripped.startswith("- "):
+                kriterien_lines.append(stripped[2:].strip())
             continue
 
         if in_aufgabe:
@@ -70,6 +89,7 @@ def parse_gaps(content: str) -> list[dict]:
 
     if current:
         current["aufgabe"] = "\n".join(aufgabe_lines).strip()
+        current["kriterien"] = [k for k in kriterien_lines if k]
         gaps.append(current)
 
     open_gaps = [g for g in gaps if g["status"] == "open"]
@@ -85,4 +105,5 @@ def load_gaps() -> list[dict]:
 
 if __name__ == "__main__":
     for gap in load_gaps():
-        print(f"[{gap['priority']}] {gap['title']} → {gap['target']}")
+        k = gap.get("kriterien", [])
+        print(f"[{gap['priority']}] {gap['title']} → {gap['target']}  ({len(k)} Kriterien)")

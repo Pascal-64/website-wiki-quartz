@@ -16,6 +16,32 @@ def _normalize_link(name: str) -> str:
     return re.sub(r"[-_\s]+", "-", name).lower()
 
 
+def check_criteria(generated: str, gap: dict, sources_text: str = "") -> list[str]:
+    """Check gap acceptance criteria. Returns unmet criteria as warning strings."""
+    unmet: list[str] = []
+    for k in gap.get("kriterien", []):
+        kl = k.lower()
+        if ("tabelle" in kl or "table" in kl):
+            if "|---|" not in generated and "| ---" not in generated:
+                unmet.append(f"Kriterium nicht erfüllt: {k}")
+        elif "codebeispiel" in kl or ("code" in kl and "peft" in kl):
+            if "```python" not in generated:
+                unmet.append(f"Kriterium nicht erfüllt: {k}")
+        elif "qlora" in kl and any(w in kl for w in ("speicher", "consumer", "hardware")):
+            if not re.search(r"90\s*%|consumer.{0,20}hardware|speicher\w*reduz", generated, re.I):
+                unmet.append(f"Kriterium nicht erfüllt: {k}")
+        elif "dpo" in kl and "reward" in kl:
+            if not re.search(r"reward.{0,10}model|belohnungsmodell", generated, re.I):
+                unmet.append(f"Kriterium nicht erfüllt: {k}")
+        elif "quellen" in kl:
+            m = re.search(r"(\d+)", kl)
+            min_q = int(m.group(1)) if m else 1
+            count = sources_text.count("### Quelle")
+            if count < min_q:
+                unmet.append(f"Kriterium nicht erfüllt: {k} (hat {count})")
+    return unmet
+
+
 def validate(generated: str, gap: dict) -> tuple[list[str], list[str]]:
     """Returns (errors, warnings). Non-empty errors block patch application."""
     errors: list[str] = []

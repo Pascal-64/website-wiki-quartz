@@ -19,7 +19,16 @@ Aufgabe:
 Ergänze den Abschnitt mit konkreten Beispielen und Erklärungen zu SFT (Supervised Fine-Tuning),
 LoRA, QLoRA, DPO (Direct Preference Optimization) und RLHF im Vergleich.
 Erkläre den Unterschied zwischen den Methoden und wann welche sinnvoll ist.
-Füge einen kurzen Codeblock oder Pseudocode für LoRA-Training hinzu falls sinnvoll.
+QLoRA ermöglicht Fine-Tuning auf Consumer-GPUs durch 4-Bit-Quantisierung (ca. 90% weniger VRAM).
+DPO ist eine Alternative zu RLHF: kein separates Reward Model nötig, direkte Optimierung auf Präferenzpaaren.
+Füge ein echtes Codebeispiel mit der peft-Bibliothek (LoraConfig) hinzu.
+
+Akzeptanzkriterien:
+- Enthält Vergleichstabelle zu SFT, LoRA, QLoRA, RLHF und DPO
+- Enthält echtes PEFT/LoRA-Codebeispiel (peft-Bibliothek)
+- Erklärt QLoRA mit Speicherreduktion und Consumer-Hardware
+- Erklärt DPO als Alternative zu RLHF ohne separates Reward Model
+- Verwendet mindestens 2 echte Quellen
 
 ---
 
