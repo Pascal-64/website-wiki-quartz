@@ -6,6 +6,17 @@ from pathlib import Path
 
 SITES_FILE = Path(__file__).parent / "search_sites.txt"
 
+# URL-Muster die auf Werbung oder unbrauchbare Weiterleitungen hinweisen
+AD_URL_PATTERNS = (
+    "bing.com/aclick",
+    "bing.com/aclk",
+    "google.com/aclk",
+    "doubleclick.net",
+    "googleadservices.com",
+    "/aclick?",
+    "?ld=",
+)
+
 
 def load_sites() -> list[str]:
     if not SITES_FILE.exists():
@@ -17,6 +28,11 @@ def load_sites() -> list[str]:
     ]
 
 
+def _is_ad(result: dict) -> bool:
+    url = result.get("href", "").lower()
+    return any(pattern in url for pattern in AD_URL_PATTERNS)
+
+
 def _build_query(gap: dict) -> str:
     title = gap.get("title", "")
     title = re.sub(r"[–:]+", " ", title)       # em-dash und Doppelpunkt entfernen, Bindestriche behalten
@@ -24,8 +40,8 @@ def _build_query(gap: dict) -> str:
     return title
 
 
-def search(gap: dict, max_results: int = 4) -> list[dict]:
-    """Search DuckDuckGo restricted to allowed sites. Returns list of result dicts."""
+def search(gap: dict, max_results: int = 6) -> list[dict]:
+    """Search DuckDuckGo restricted to allowed sites. Returns filtered result list."""
     sites = load_sites()
     if not sites:
         print("  Keine Sites in search_sites.txt — Suche übersprungen.")
@@ -44,7 +60,12 @@ def search(gap: dict, max_results: int = 4) -> list[dict]:
     print(f"  Suche: {full_query!r}")
     try:
         with DDGS() as ddgs:
-            results = list(ddgs.text(full_query, max_results=max_results))
+            raw = list(ddgs.text(full_query, max_results=max_results))
+        # Ads und Weiterleitungen herausfiltern, auf max 4 echte Ergebnisse kürzen
+        results = [r for r in raw if not _is_ad(r)][:4]
+        filtered = len(raw) - len(results)
+        if filtered:
+            print(f"  {filtered} Werbeeintrag/Weiterleitung herausgefiltert.")
         print(f"  {len(results)} Ergebnis(se) gefunden.")
         return results
     except Exception as exc:
