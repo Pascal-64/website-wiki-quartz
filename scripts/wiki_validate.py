@@ -12,6 +12,10 @@ FLOSKELN = [
 ]
 
 
+def _normalize_link(name: str) -> str:
+    return re.sub(r"[-_\s]+", "-", name).lower()
+
+
 def validate(generated: str, gap: dict) -> tuple[list[str], list[str]]:
     """Returns (errors, warnings). Non-empty errors block patch application."""
     errors: list[str] = []
@@ -28,27 +32,50 @@ def validate(generated: str, gap: dict) -> tuple[list[str], list[str]]:
 
     first_line = text.split("\n")[0].strip()
 
-    if not re.match(r"^#{2,3}\s", first_line):
-        errors.append(f"Beginnt nicht mit ## oder ### Überschrift: {first_line[:80]!r}")
+    # Heading check: must start with a heading, and at correct level
+    if not re.match(r"^#{2,}\s", first_line):
+        errors.append(f"Beginnt nicht mit einer Markdown-Überschrift: {first_line[:80]!r}")
+    else:
+        heading = gap.get("heading", "").strip('"').strip()
+        if heading:
+            m = re.match(r"^(#+)\s", heading)
+            if m:
+                target_level = len(m.group(1))
+                expected_prefix = "#" * (target_level + 1) + " "
+                if not first_line.startswith(expected_prefix):
+                    errors.append(
+                        f"Heading-Ebene falsch: erwartet '{expected_prefix.strip()}', "
+                        f"gefunden: {first_line[:60]!r}"
+                    )
 
+    # Floskel check
     lower_start = text[:80].lower()
     for floskel in FLOSKELN:
         if lower_start.startswith(floskel):
             errors.append(f"Beginnt mit Modellfloskel: {first_line[:80]!r}")
             break
 
+    # Codeblock wrapper
     if re.match(r"^```", text) and text.rstrip().endswith("```"):
         errors.append("Ausgabe komplett in Markdown-Codeblock eingewickelt.")
 
+    # JSON detection
     if re.search(r"^\s*\{", text, re.MULTILINE) and re.search(r'"\w+":', text):
         errors.append("Ausgabe enthält JSON statt Markdown.")
 
+    # HTML detection
     if re.search(r"<html|<body|<div\s|<p>", text, re.IGNORECASE):
         errors.append("Ausgabe enthält HTML als Hauptformat.")
 
+    # Empty wikilinks
     if "[[]]" in text:
         errors.append("Leere Wikilinks [[]] gefunden.")
 
+    # LaTeX notation incompatible with Quartz
+    if re.search(r"\\\(|\\\)|\\\[|\\\]", text):
+        errors.append(r"LaTeX-Notation \(...\) gefunden — bitte $...$ verwenden (Quartz).")
+
+    # Target file and heading existence
     target_path = Path(gap.get("target", ""))
     if not target_path.exists():
         errors.append(f"Zieldatei existiert nicht: {gap.get('target')}")
@@ -58,8 +85,8 @@ def validate(generated: str, gap: dict) -> tuple[list[str], list[str]]:
         if heading and heading not in file_content:
             errors.append(f"Ziel-Heading nicht gefunden in Datei: {heading!r}")
 
-        gen_headings = [h.strip() for h in re.findall(r"^#{2,3}\s+(.+)$", text, re.MULTILINE)]
-        file_headings = [h.strip() for h in re.findall(r"^#{2,3}\s+(.+)$", file_content, re.MULTILINE)]
+        gen_headings = [h.strip() for h in re.findall(r"^#{2,}\s+(.+)$", text, re.MULTILINE)]
+        file_headings = [h.strip() for h in re.findall(r"^#{2,}\s+(.+)$", file_content, re.MULTILINE)]
         for h in gen_headings:
             if h in file_headings:
                 errors.append(f"Überschrift existiert bereits in Zieldatei: {h!r}")
@@ -67,14 +94,14 @@ def validate(generated: str, gap: dict) -> tuple[list[str], list[str]]:
     # Warnings
     wikilinks = re.findall(r"\[\[([^\]]+)\]\]", text)
     if wikilinks:
-        known = {
-            md.stem
+        known_normalized = {
+            _normalize_link(md.stem)
             for md in CONTENT_DIR.rglob("*.md")
             if md.name not in ("index.md", "wiki-gaps.md")
         }
         for link in wikilinks:
             page = link.split("|")[0].strip()
-            if page not in known:
+            if _normalize_link(page) not in known_normalized:
                 warnings.append(f"Unbekannter Wikilink: [[{page}]]")
     else:
         warnings.append("Keine internen Wikilinks.")
@@ -91,7 +118,7 @@ def validate(generated: str, gap: dict) -> tuple[list[str], list[str]]:
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 3:
-        print("Usage: wiki_validate.py <generated.md> <gap_target> <gap_heading>")
+        print("Usage: wiki_validate.py <generated.md> <gap_target> [gap_heading]")
         sys.exit(1)
     text = Path(sys.argv[1]).read_text(encoding="utf-8")
     gap = {"target": sys.argv[2], "heading": sys.argv[3] if len(sys.argv) > 3 else ""}

@@ -6,6 +6,11 @@ from pathlib import Path
 
 CONTENT_DIR = Path("content")
 MAX_CONTEXT_CHARS = 20000
+STYLE_FILE = Path(__file__).parent / "wiki_style.md"
+
+
+def load_style_guide() -> str:
+    return STYLE_FILE.read_text(encoding="utf-8") if STYLE_FILE.exists() else ""
 
 
 def get_known_pages() -> list[str]:
@@ -87,6 +92,7 @@ def build_context(gap: dict, max_chars: int = MAX_CONTEXT_CHARS) -> dict:
 
     return {
         "task": task,
+        "style_guide": load_style_guide(),
         "frontmatter": frontmatter_trimmed,
         "headings": headings_trimmed,
         "target_section": target_section_trimmed,

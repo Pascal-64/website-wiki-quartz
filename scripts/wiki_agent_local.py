@@ -14,6 +14,7 @@ Usage:
 """
 
 import argparse
+import re
 import subprocess
 import sys
 from datetime import date
@@ -38,14 +39,22 @@ Du erweiterst ein deutsches Technik-Wiki im Obsidian/Quartz-Format.
 Gib ausschließlich den neuen Markdown-Abschnitt zurück.
 
 Regeln:
-- Beginne direkt mit einer ## oder ### Überschrift.
+- Beginne direkt mit der Überschrift in der erwarteten Ebene (steht explizit im Prompt).
 - Keine Einleitung, kein "Hier ist", kein "Gerne", kein "Natürlich".
 - Kein Markdown-Codeblock um die gesamte Antwort.
 - Kein JSON, kein HTML.
 - Keine Wiederholung bestehender Abschnitte.
+- Mathematik: $...$ (inline) und $$...$$ (Block). KEIN \\(...\\) oder \\[...\\].
+- Heading-Ebene: Eine Ebene tiefer als das Ziel-Heading. Die erwartete Ebene steht im Prompt.
 - Wikilinks im Format [[Seitenname]] nur wenn sinnvoll.
 - Schreibe auf Deutsch.\
 """
+
+TRANSIENT_KEYWORDS = (
+    "connection refused", "max retries exceeded",
+    "read timed out", "connecterror", "connectionerror",
+    "failed to connect",
+)
 
 
 def make_run_dir() -> Path:
@@ -59,17 +68,43 @@ def make_run_dir() -> Path:
 
 
 def build_user_prompt(gap: dict, ctx: dict) -> str:
-    return (
-        f"Aufgabe:\n{ctx.get('task', gap['title'])}\n\n"
-        f"Zieldatei: {gap['target']}\n"
+    heading = gap.get("heading", "").strip('"').strip()
+    m = re.match(r"^(#+)\s", heading)
+    target_level = len(m.group(1)) if m else 2
+    expected_prefix = "#" * (target_level + 1)
+
+    parts: list[str] = []
+
+    if ctx.get("style_guide"):
+        parts.append(f"## Style-Referenz\n\n{ctx['style_guide']}")
+
+    parts.append(f"## Aufgabe\n\n{ctx.get('task', gap['title'])}")
+
+    parts.append(
+        f"## Zieldatei\n\n"
+        f"Datei: {gap['target']}\n"
         f"Einfügemodus: {gap['mode']}\n"
-        f"Ziel-Heading: {gap['heading']}\n\n"
-        f"Frontmatter:\n{ctx.get('frontmatter', '')}\n\n"
-        f"Überschriftenstruktur der Datei:\n{ctx.get('headings', '')}\n\n"
-        f"Relevanter Kontext aus der Zieldatei:\n{ctx.get('target_section', '')}\n\n"
-        f"Bekannte Wiki-Seiten für interne Links:\n{ctx.get('known_pages', '')}\n\n"
-        "Erzeuge jetzt nur den neuen Markdown-Abschnitt."
+        f"Ziel-Heading: {gap['heading']}\n"
+        f"Erwartete Heading-Ebene für neuen Abschnitt: `{expected_prefix}` "
+        f"(eine Ebene tiefer als Ziel-Heading)"
     )
+
+    parts.append(
+        f"## Kontext aus der Zieldatei\n\n"
+        f"### Frontmatter\n{ctx.get('frontmatter', '')}\n\n"
+        f"### Überschriftenstruktur\n{ctx.get('headings', '')}\n\n"
+        f"### Relevanter Abschnitt\n{ctx.get('target_section', '')}"
+    )
+
+    if ctx.get("known_pages"):
+        parts.append(f"## Bekannte Wiki-Seiten\n\n{ctx['known_pages']}")
+
+    parts.append(
+        f"Erzeuge jetzt nur den neuen Markdown-Abschnitt. "
+        f"Beginne mit einer `{expected_prefix}` Überschrift."
+    )
+
+    return "\n\n---\n\n".join(parts)
 
 
 def update_gap_status(content: str, title: str, new_status: str) -> str:
@@ -162,10 +197,18 @@ def main() -> None:
             )
             generated: str = response["response"]
         except Exception as exc:
-            print(f"  Ollama error: {exc}", file=sys.stderr)
-            (run_dir / "result.log").write_text(f"FAILED: Ollama error: {exc}\n", encoding="utf-8")
-            gaps_content = update_gap_status(gaps_content, gap["title"], "failed")
-            GAPS_FILE.write_text(gaps_content, encoding="utf-8")
+            err_lower = str(exc).lower()
+            is_transient = any(k in err_lower for k in TRANSIENT_KEYWORDS)
+            if is_transient:
+                print("  Verbindungsfehler (transient) — Status bleibt 'open'. Ist Ollama gestartet?", file=sys.stderr)
+            else:
+                print(f"  Fehler: {exc}", file=sys.stderr)
+                if args.apply:
+                    gaps_content = update_gap_status(gaps_content, gap["title"], "failed")
+                    GAPS_FILE.write_text(gaps_content, encoding="utf-8")
+            (run_dir / "result.log").write_text(
+                f"{'TRANSIENT' if is_transient else 'FAILED'}: {exc}\n", encoding="utf-8"
+            )
             continue
 
         (run_dir / "generated.md").write_text(generated, encoding="utf-8")
@@ -190,8 +233,9 @@ def main() -> None:
 
         if errors:
             (run_dir / "result.log").write_text("\n".join(log_lines) + "\n", encoding="utf-8")
-            gaps_content = update_gap_status(gaps_content, gap["title"], "failed")
-            GAPS_FILE.write_text(gaps_content, encoding="utf-8")
+            if args.apply:
+                gaps_content = update_gap_status(gaps_content, gap["title"], "failed")
+                GAPS_FILE.write_text(gaps_content, encoding="utf-8")
             continue
 
         if not args.apply:
