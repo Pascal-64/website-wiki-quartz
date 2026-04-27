@@ -50,6 +50,50 @@ Ein vortrainiertes Modell wird auf speziellen Daten weitertrainiert. Aufwändig,
 ### RLHF
 Reinforcement Learning from Human Feedback. Methode um LLMs durch menschliches Feedback zu verbessern. Genutzt bei GPT, Claude etc.
 
+
+#### Vergleich von SFT, LoRA, QLoRA, DPO und RLHF
+
+Supervised Fine-Tuning (SFT) ist die grundlegende Methode zur Anpassung eines LLMs an spezifische Aufgaben durch das Training mit annotierten Daten. Diese Ansatz erfordert jedoch oft signifikante Rechenressourcen und kann für sehr große Modelle insbesondere auf Consumer-GPUs schwierig sein.
+
+Low-Rank Adaptation (LoRA) ist eine Methode zur Reduktion der Anzahl der zu trainierenden Parameter durch die Einführung von Adapter-Layern. Diese Technik vereinfacht das Fine-Tuning und reduziert die Speicheranforderungen, ohne die Leistung des Modells stark einzuschränken.
+
+Quantized Low-Rank Adaptation (QLoRA) verleiht LoRA zusätzliche Effizienz durch 4-Bit-Quantisierung der Modelle. QLoRA ermöglicht das Fine-Tuning von großen Modellen auf Consumer-GPUs mit begrenzter VRAM, da es ca. 90% weniger Speicher benötigt (siehe [2305.14314] und [github.com]). Dies macht QLoRA zu einer idealen Wahl für Unternehmen und Einzelpersonen ohne hohe Rechenressourcen.
+
+Direct Preference Optimization (DPO) ist eine Alternative zu RLHF, die das Training direkt auf Präferenzpaaren basiert. Im Gegensatz zu RLHF erfordert DPO kein separates Reward Model und kann daher effizienter sein (siehe [arxiv.org]). Diese Methode ist besonders nützlich, wenn es schwierig ist, ein passendes Reward-Modell zu definieren.
+
+Reinforcement Learning from Human Feedback (RLHF) verbessert LLMs durch menschliches Feedback, indem das Modell lerneinige Aktionen zu treffen. RLHF erfordert jedoch ein separates Reward Model, was seine Anwendung erschweren kann. DPO bietet eine bessere Skalierbarkeit und ist in der Praxis oft stabiler als ein fester Wert für die Lernrate.
+
+| Methode | Beschreibung | Vorteile | Nachteile |
+| --- | --- | --- | --- |
+| SFT | Supervised Fine-Tuning mit annotierten Daten | Einfach zu implementieren | Hohe Rechenressourcen erforderlich |
+| LoRA | Reduktion der Trainierungsparameter durch Adapter-Layer | Ermöglicht effizientes Fine-Tuning | Geringe Leistungseinsparungen für große Modelle |
+| QLoRA | Quantisierte Version von LoRA | Ermöglicht Fine-Tuning auf Consumer-GPUs mit begrenzter VRAM | Erfordert zusätzliche Implementierungsaufwand |
+| DPO | Direkte Optimierung basierend auf Präferenzpaaren | Kein separates Reward Model erforderlich, bessere Skalierbarkeit | Kann schwieriger zu implementieren als SFT oder LoRA |
+| RLHF | Verbesserung durch menschliches Feedback und ein Reward-Modell | Stabile Konvergenz | Erfordert spezielles Training für das Reward-Modell |
+
+#### Codebeispiel mit der peft-Bibliothek
+
+```python
+from peft import LoraConfig, get_peft_model
+
+# Konfiguration von LoRA
+config = LoraConfig(
+    r=8,  # Dimension des Adapter-Layers
+    lora_alpha=16,
+    target_modules=["q_proj", "v_proj"],
+    lora_dropout=0.1,
+    bias="none",
+    task_type="CAUSAL_LM"
+)
+
+# Anwendung von LoRA auf ein Modell
+model = get_peft_model(model, config)
+```
+
+**Quellen:**
+- [2305.14314]
+- [github.com]
+
 ## Lokale vs. Cloud-Modelle
 
 | Aspekt | Lokal (Ollama, LM Studio) | Cloud (OpenAI, Anthropic) |
