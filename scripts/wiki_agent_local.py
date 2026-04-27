@@ -194,11 +194,8 @@ def main() -> None:
             GAPS_FILE.write_text(gaps_content, encoding="utf-8")
             continue
 
-        gaps_content = update_gap_status(gaps_content, gap["title"], "generated")
-        GAPS_FILE.write_text(gaps_content, encoding="utf-8")
-
         if not args.apply:
-            log_lines.append("\nDRY-RUN: content/ not modified. Use --apply to apply.")
+            log_lines.append("\nDRY-RUN: content/ not modified. Run 3_apply.bat to apply.")
             (run_dir / "result.log").write_text("\n".join(log_lines) + "\n", encoding="utf-8")
             print(f"  Dry-run done. See: {run_dir / 'generated.md'}")
             continue
