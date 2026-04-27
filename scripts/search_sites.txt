@@ -1,0 +1,8 @@
+# Erlaubte Suchdomains für den Wiki-Agenten.
+# Eine Domain pro Zeile. Zeilen mit # werden ignoriert.
+# Erweitern wenn nötig.
+
+huggingface.co
+arxiv.org
+en.wikipedia.org
+pytorch.org

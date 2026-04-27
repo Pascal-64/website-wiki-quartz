@@ -27,6 +27,7 @@ import ollama
 from wiki_apply_patch import apply_patch
 from wiki_context import build_context
 from wiki_detect_gaps import parse_gaps
+from wiki_search import format_results, search
 from wiki_validate import validate
 
 CONTENT_DIR = Path("content")
@@ -80,6 +81,9 @@ def build_user_prompt(gap: dict, ctx: dict) -> str:
 
     parts.append(f"## Aufgabe\n\n{ctx.get('task', gap['title'])}")
 
+    if ctx.get("search_results"):
+        parts.append(f"## Recherche-Ergebnisse\n\n{ctx['search_results']}")
+
     parts.append(
         f"## Zieldatei\n\n"
         f"Datei: {gap['target']}\n"
@@ -130,6 +134,7 @@ def main() -> None:
     parser.add_argument("--model", default="qwen2.5-coder:14b")
     parser.add_argument("--apply", action="store_true", help="Apply patch to content/")
     parser.add_argument("--commit", action="store_true", help="Create git commit (requires --apply)")
+    parser.add_argument("--no-search", action="store_true", help="Skip web search")
     args = parser.parse_args()
 
     if args.commit and not args.apply:
@@ -172,6 +177,17 @@ def main() -> None:
         )
 
         ctx = build_context(gap)
+
+        if not args.no_search:
+            print("  Web-Suche läuft...")
+            search_results = search(gap)
+            ctx["search_results"] = format_results(search_results)
+            (run_dir / "sources.md").write_text(
+                f"# Recherche-Ergebnisse\n\n{ctx['search_results']}\n", encoding="utf-8"
+            )
+        else:
+            ctx["search_results"] = ""
+
         (run_dir / "context.md").write_text(
             f"# Context\n\n"
             f"## Frontmatter\n{ctx.get('frontmatter', '')}\n\n"
