@@ -16,12 +16,62 @@ def _normalize_link(name: str) -> str:
     return re.sub(r"[-_\s]+", "-", name).lower()
 
 
+def check_structured_criteria(generated: str, gap: dict, sources_text: str = "") -> list[str]:
+    """Check structured akzeptanzkriterien. Returns unmet criteria as warning strings."""
+    unmet: list[str] = []
+    for c in gap.get("akzeptanzkriterien", []):
+        ctype = c.get("type", "")
+        label = f"[{ctype}]"
+
+        if ctype == "table":
+            has_table = "|---|" in generated or "| ---" in generated
+            if not has_table:
+                unmet.append(f"Kriterium {label}: Keine Markdown-Tabelle gefunden.")
+            else:
+                missing = [t for t in c.get("contains", []) if t.lower() not in generated.lower()]
+                if missing:
+                    unmet.append(f"Kriterium {label}: Tabelle fehlt Einträge: {missing}")
+
+        elif ctype == "code":
+            lang = c.get("language", "")
+            pattern = f"```{lang}" if lang else "```"
+            if pattern not in generated:
+                unmet.append(f"Kriterium {label}: Kein {pattern}-Codeblock gefunden.")
+            else:
+                missing = [t for t in c.get("contains", []) if t.lower() not in generated.lower()]
+                if missing:
+                    unmet.append(f"Kriterium {label}: Codeblock fehlt Begriffe: {missing}")
+
+        elif ctype == "contains_all":
+            missing = [t for t in c.get("terms", []) if t.lower() not in generated.lower()]
+            if missing:
+                unmet.append(f"Kriterium {label}: Fehlende Begriffe: {missing}")
+
+        elif ctype == "contains_any":
+            terms = c.get("terms", [])
+            if terms and not any(t.lower() in generated.lower() for t in terms):
+                unmet.append(f"Kriterium {label}: Keiner dieser Begriffe gefunden: {terms}")
+
+        elif ctype == "sources":
+            min_q = c.get("min", 1)
+            count = sources_text.count("### Quelle")
+            if count < min_q:
+                unmet.append(f"Kriterium {label}: Nur {count} Quellen, min. {min_q} erwartet.")
+
+        elif ctype == "forbidden_terms":
+            found = [t for t in c.get("terms", []) if t.lower() in generated.lower()]
+            if found:
+                unmet.append(f"Kriterium {label}: Verbotene Begriffe gefunden: {found}")
+
+    return unmet
+
+
 def check_criteria(generated: str, gap: dict, sources_text: str = "") -> list[str]:
-    """Check gap acceptance criteria. Returns unmet criteria as warning strings."""
+    """Legacy check for free-text kriterien. Returns unmet criteria as warning strings."""
     unmet: list[str] = []
     for k in gap.get("kriterien", []):
         kl = k.lower()
-        if ("tabelle" in kl or "table" in kl):
+        if "tabelle" in kl or "table" in kl:
             if "|---|" not in generated and "| ---" not in generated:
                 unmet.append(f"Kriterium nicht erfüllt: {k}")
         elif "codebeispiel" in kl or ("code" in kl and "peft" in kl):
@@ -42,7 +92,7 @@ def check_criteria(generated: str, gap: dict, sources_text: str = "") -> list[st
     return unmet
 
 
-def validate(generated: str, gap: dict) -> tuple[list[str], list[str]]:
+def validate(generated: str, gap: dict, sources_text: str = "") -> tuple[list[str], list[str]]:
     """Returns (errors, warnings). Non-empty errors block patch application."""
     errors: list[str] = []
     warnings: list[str] = []
@@ -58,7 +108,6 @@ def validate(generated: str, gap: dict) -> tuple[list[str], list[str]]:
 
     first_line = text.split("\n")[0].strip()
 
-    # Heading check: must start with a heading, and at correct level
     if not re.match(r"^#{2,}\s", first_line):
         errors.append(f"Beginnt nicht mit einer Markdown-Überschrift: {first_line[:80]!r}")
     else:
@@ -74,34 +123,27 @@ def validate(generated: str, gap: dict) -> tuple[list[str], list[str]]:
                         f"gefunden: {first_line[:60]!r}"
                     )
 
-    # Floskel check
     lower_start = text[:80].lower()
     for floskel in FLOSKELN:
         if lower_start.startswith(floskel):
             errors.append(f"Beginnt mit Modellfloskel: {first_line[:80]!r}")
             break
 
-    # Codeblock wrapper
     if re.match(r"^```", text) and text.rstrip().endswith("```"):
         errors.append("Ausgabe komplett in Markdown-Codeblock eingewickelt.")
 
-    # JSON detection
     if re.search(r"^\s*\{", text, re.MULTILINE) and re.search(r'"\w+":', text):
         errors.append("Ausgabe enthält JSON statt Markdown.")
 
-    # HTML detection
     if re.search(r"<html|<body|<div\s|<p>", text, re.IGNORECASE):
         errors.append("Ausgabe enthält HTML als Hauptformat.")
 
-    # Empty wikilinks
     if "[[]]" in text:
         errors.append("Leere Wikilinks [[]] gefunden.")
 
-    # LaTeX notation incompatible with Quartz
     if re.search(r"\\\(|\\\)|\\\[|\\\]", text):
         errors.append(r"LaTeX-Notation \(...\) gefunden — bitte $...$ verwenden (Quartz).")
 
-    # Target file and heading existence
     target_path = Path(gap.get("target", ""))
     if not target_path.exists():
         errors.append(f"Zieldatei existiert nicht: {gap.get('target')}")
@@ -117,7 +159,14 @@ def validate(generated: str, gap: dict) -> tuple[list[str], list[str]]:
             if h in file_headings:
                 errors.append(f"Überschrift existiert bereits in Zieldatei: {h!r}")
 
-    # Warnings
+    # Criteria check: structured if available, else legacy
+    if gap.get("akzeptanzkriterien"):
+        unmet = check_structured_criteria(text, gap, sources_text)
+    else:
+        unmet = check_criteria(text, gap, sources_text)
+    warnings.extend(unmet)
+
+    # General warnings
     wikilinks = re.findall(r"\[\[([^\]]+)\]\]", text)
     if wikilinks:
         known_normalized = {

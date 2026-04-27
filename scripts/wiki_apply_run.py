@@ -15,7 +15,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from wiki_apply_patch import apply_patch
-from wiki_validate import validate
+from wiki_detect_gaps import load_all_gaps
+from wiki_validate import validate, check_structured_criteria
 
 RUNS_DIR = Path(".runs/wiki-agent")
 GAPS_FILE = Path("content/wiki-gaps.md")
@@ -29,14 +30,53 @@ def collect_runs() -> list[Path]:
     )
 
 
+_gap_cache: list[dict] | None = None
+
+
+def _get_all_gaps() -> list[dict]:
+    global _gap_cache
+    if _gap_cache is None:
+        _gap_cache = load_all_gaps()
+    return _gap_cache
+
+
+def _find_gap_by_title(title: str) -> dict | None:
+    title_lower = title.lower().strip()
+    for g in _get_all_gaps():
+        if g.get("title", "").lower().strip() == title_lower:
+            return g
+    return None
+
+
 def run_metrics(run_dir: Path) -> dict:
     gen = run_dir / "generated.md"
     sources = run_dir / "sources.md"
     result_log = run_dir / "result.log"
+    gap_file = run_dir / "gap.md"
 
     text = gen.read_text(encoding="utf-8") if gen.exists() else ""
     sources_text = sources.read_text(encoding="utf-8") if sources.exists() else ""
     result_text = result_log.read_text(encoding="utf-8") if result_log.exists() else ""
+
+    criteria_met = 0
+    criteria_total = 0
+    num_errors = 0
+    num_warnings = 0
+
+    if text and gap_file.exists():
+        gap_data = parse_gap_md(gap_file.read_text(encoding="utf-8"))
+        gap_title = gap_data.get("title", "")
+        full_gap = _find_gap_by_title(gap_title) if gap_title else None
+        if full_gap:
+            errors, warnings = validate(text, full_gap, sources_text)
+            num_errors = len(errors)
+            num_warnings = len(warnings)
+            ak = full_gap.get("akzeptanzkriterien", [])
+            required = [c for c in ak if c.get("required", True)]
+            criteria_total = len(required)
+            if criteria_total > 0:
+                unmet = check_structured_criteria(text, full_gap, sources_text)
+                criteria_met = criteria_total - len(unmet)
 
     return {
         "chars": len(text),
@@ -44,19 +84,32 @@ def run_metrics(run_dir: Path) -> dict:
         "has_table": "|---|" in text or "| ---" in text,
         "source_count": sources_text.count("### Quelle"),
         "ok": bool(text) and "ERRORS:" not in result_text and "FAILED:" not in result_text,
+        "criteria_met": criteria_met,
+        "criteria_total": criteria_total,
+        "errors": num_errors,
+        "warnings": num_warnings,
     }
 
 
 def print_runs(runs: list[Path]) -> None:
-    print(f"\n{'Nr':>3}  {'Run':<30}  {'Zeichen':>7}  {'Code':<5}  {'Tab.':<5}  {'Qu.':>3}  Status")
-    print("-" * 68)
+    header = f"{'Nr':>3}  {'Run':<30}  {'Zeichen':>7}  {'Kriterien':>9}  {'Err':>3}  {'Warn':>4}  {'Qu.':>3}  {'Code':<5}  {'Tab.':<5}  Status"
+    print(f"\n{header}")
+    print("-" * len(header))
     for i, run_dir in enumerate(runs):
         m = run_metrics(run_dir)
         label = "/".join(run_dir.parts[-3:])
         status = "OK  " if m["ok"] else "FAIL"
         code = "ja" if m["has_code"] else "nein"
         tab = "ja" if m["has_table"] else "nein"
-        print(f"{i+1:>3}  {label:<30}  {m['chars']:>7}  {code:<5}  {tab:<5}  {m['source_count']:>3}  {status}")
+        if m["criteria_total"] > 0:
+            crit = f"{m['criteria_met']}/{m['criteria_total']}"
+        else:
+            crit = "–"
+        print(
+            f"{i+1:>3}  {label:<30}  {m['chars']:>7}  {crit:>9}  "
+            f"{m['errors']:>3}  {m['warnings']:>4}  {m['source_count']:>3}  "
+            f"{code:<5}  {tab:<5}  {status}"
+        )
     print()
 
 
@@ -64,8 +117,9 @@ def parse_gap_md(text: str) -> dict:
     gap: dict = {}
     for line in text.split("\n"):
         for key in ("Title", "Target", "Mode", "Heading"):
-            if line.startswith(f"**{key}:**"):
-                gap[key.lower()] = line.split(":", 1)[1].strip()
+            prefix = f"**{key}:**"
+            if line.startswith(prefix):
+                gap[key.lower()] = line[len(prefix):].strip()
     return gap
 
 

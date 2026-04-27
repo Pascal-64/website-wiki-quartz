@@ -27,8 +27,9 @@ import ollama
 from wiki_apply_patch import apply_patch
 from wiki_context import build_context
 from wiki_detect_gaps import parse_gaps
+from wiki_enrich_links import enrich as enrich_links
 from wiki_search import extract_key_facts, format_results, search
-from wiki_validate import check_criteria, validate
+from wiki_validate import validate
 
 CONTENT_DIR = Path("content")
 GAPS_FILE = CONTENT_DIR / "wiki-gaps.md"
@@ -72,6 +73,37 @@ def make_run_dir() -> Path:
     return run_dir
 
 
+def _render_criteria(gap: dict) -> str:
+    """Render structured akzeptanzkriterien as human-readable bullet list for the prompt."""
+    lines: list[str] = []
+    for c in gap.get("akzeptanzkriterien", []):
+        ctype = c.get("type", "")
+        if ctype == "table":
+            items = c.get("contains", [])
+            lines.append(f"- Enthält eine Tabelle" + (f" mit: {', '.join(items)}" if items else ""))
+        elif ctype == "code":
+            lang = c.get("language", "")
+            items = c.get("contains", [])
+            lang_str = f" ({lang})" if lang else ""
+            lines.append(f"- Enthält einen Codeblock{lang_str}" + (f" mit: {', '.join(items)}" if items else ""))
+        elif ctype == "contains_all":
+            terms = c.get("terms", [])
+            lines.append(f"- Enthält alle Begriffe: {', '.join(terms)}")
+        elif ctype == "contains_any":
+            terms = c.get("terms", [])
+            lines.append(f"- Enthält mindestens einen der Begriffe: {', '.join(terms)}")
+        elif ctype == "sources":
+            min_q = c.get("min", 1)
+            lines.append(f"- Mindestens {min_q} Quelle(n) angeben")
+        elif ctype == "forbidden_terms":
+            terms = c.get("terms", [])
+            lines.append(f"- Darf NICHT enthalten: {', '.join(terms)}")
+    # Legacy free-text criteria
+    for k in gap.get("kriterien", []):
+        lines.append(f"- {k}")
+    return "\n".join(lines)
+
+
 def build_user_prompt(gap: dict, ctx: dict) -> str:
     heading = gap.get("heading", "").strip('"').strip()
     m = re.match(r"^(#+)\s", heading)
@@ -84,6 +116,10 @@ def build_user_prompt(gap: dict, ctx: dict) -> str:
         parts.append(f"## Style-Referenz\n\n{ctx['style_guide']}")
 
     parts.append(f"## Aufgabe\n\n{ctx.get('task', gap['title'])}")
+
+    criteria_text = _render_criteria(gap)
+    if criteria_text:
+        parts.append(f"## Akzeptanzkriterien\n\nDer Abschnitt muss diese Kriterien erfüllen:\n{criteria_text}")
 
     if ctx.get("search_results"):
         parts.append(f"## Recherche-Ergebnisse\n\n{ctx['search_results']}")
@@ -191,7 +227,7 @@ def main() -> None:
             print("  Web-Suche läuft...")
             search_results = search(gap)
             ctx["search_results"] = format_results(search_results)
-            ctx["key_facts"] = extract_key_facts(search_results)
+            ctx["key_facts"] = extract_key_facts(search_results, gap)
             (run_dir / "sources.md").write_text(
                 f"# Recherche-Ergebnisse\n\n{ctx['search_results']}\n\n"
                 f"# Key Facts\n\n{ctx['key_facts']}\n",
@@ -240,11 +276,15 @@ def main() -> None:
             )
             continue
 
+        generated, added_links = enrich_links(generated, gap)
+        if added_links:
+            print(f"  Wikilinks ergänzt: {', '.join(added_links)}")
+
         (run_dir / "generated.md").write_text(generated, encoding="utf-8")
         print(f"  Generated {len(generated)} chars.")
 
-        errors, warnings = validate(generated, gap)
-        warnings.extend(check_criteria(generated, gap, ctx.get("search_results", "")))
+        sources_text = ctx.get("search_results", "")
+        errors, warnings = validate(generated, gap, sources_text)
         log_lines: list[str] = []
 
         if errors:
