@@ -18,7 +18,9 @@ def load_sites() -> list[str]:
 
 
 def _build_query(gap: dict) -> str:
-    title = re.sub(r"[–:\-]+", " ", gap.get("title", "")).strip()
+    title = gap.get("title", "")
+    title = re.sub(r"[–:]+", " ", title)       # em-dash und Doppelpunkt entfernen, Bindestriche behalten
+    title = re.sub(r"\s+", " ", title).strip()  # mehrfache Leerzeichen zusammenführen
     return title
 
 
@@ -30,9 +32,9 @@ def search(gap: dict, max_results: int = 4) -> list[dict]:
         return []
 
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
     except ImportError:
-        print("  duckduckgo-search fehlt: pip install duckduckgo-search")
+        print("  ddgs fehlt: pip install ddgs")
         return []
 
     query = _build_query(gap)
