@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from datetime import date
 
@@ -13,8 +14,9 @@ import anthropic
 CONTENT_DIR = Path("content")
 GAPS_FILE = CONTENT_DIR / "wiki-gaps.md"
 PATCHES_DIR = Path("tmp/wiki-patches")
-MAX_GAPS_PER_RUN = 2
+MAX_GAPS_PER_RUN = int(os.getenv("MAX_GAPS_PER_RUN", "2"))
 MAX_TOKENS = 2500
+SLEEP_SECONDS = int(os.getenv("CLAUDE_SLEEP_SECONDS", "65"))
 
 SYSTEM_PROMPT = """Du erweiterst ein deutsches Technik-Wiki im Obsidian/Quartz-Format.
 
@@ -37,6 +39,20 @@ Gib NUR valides JSON zurück, ohne Markdown-Code-Block darum:
   "confidence": 0.85,
   "needs_human_review": false
 }"""
+
+
+def parse_json_response(text: str) -> dict:
+    text = text.strip()
+    text = re.sub(r"^```json?\n?", "", text)
+    text = re.sub(r"\n?```$", "", text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        raise ValueError(f"No JSON object found in Claude response: {text[:200]}")
+    return json.loads(match.group(0))
 
 
 def parse_open_items(content: str) -> list[dict]:
@@ -105,7 +121,8 @@ def call_claude(item: dict, existing: str, extra_sources: list[str]) -> dict | N
 
     source_block = ""
     if extra_sources:
-        source_block = "\n\nBereits vorhandene Quellen zum Thema:\n" + "\n".join(f"- {s}" for s in extra_sources)
+        sources_text = "\n".join(f"- {s}" for s in extra_sources)[:8000]
+        source_block = "\n\nBereits vorhandene Quellen zum Thema:\n" + sources_text
 
     existing_block = ""
     if existing:
@@ -132,13 +149,9 @@ def call_claude(item: dict, existing: str, extra_sources: list[str]) -> dict | N
         print(f"  No text in response for: {item['title']}")
         return None
 
-    # Strip optional markdown code fences
-    text = re.sub(r"^```json?\n?", "", text.strip())
-    text = re.sub(r"\n?```$", "", text.strip())
-
     try:
-        return json.loads(text)
-    except json.JSONDecodeError as exc:
+        return parse_json_response(text)
+    except (json.JSONDecodeError, ValueError) as exc:
         print(f"  JSON parse error: {exc}\n  Response: {text[:300]}", file=sys.stderr)
         return None
 
@@ -179,10 +192,15 @@ def main() -> None:
         patch["_gap_item"] = item
 
         slug = re.sub(r"[^\w]", "_", item["title"][:50])
+
         patch_path = PATCHES_DIR / f"{slug}.json"
         patch_path.write_text(json.dumps(patch, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"  Patch written: {patch_path.name}")
         written += 1
+
+        if written < len(to_process):
+            print(f"  Sleeping {SLEEP_SECONDS}s to avoid rate limit...")
+            time.sleep(SLEEP_SECONDS)
 
         # Mark item as pending review in wiki-gaps.md
         updated = content.replace(
