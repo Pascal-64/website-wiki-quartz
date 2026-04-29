@@ -1,6 +1,6 @@
 # Website Wiki Quartz
 
-Eigenständiges Quartz-Wiki als öffentlicher Wissensbereich zur Portfolio-Seite.
+Eigenständiges Quartz-Wiki als öffentlicher Wissensbereich.
 
 ## Aktuelle Production-URL
 
